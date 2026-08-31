@@ -1,0 +1,9 @@
+[package]
+name = "bagd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.3", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
+yaml_serde = "0.10.4"
