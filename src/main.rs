@@ -1,6 +1,8 @@
 use clap::Parser;
 use clap::Subcommand;
 use serde::Deserialize;
+use sha1::Digest;
+use sha1::Sha1;
 use std::fs;
 use std::io::Write;
 use std::os::unix::process::CommandExt;
@@ -405,6 +407,17 @@ fn missing_asm_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn sha1sum_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+    if let Ok(content) = std::fs::read("baserom.gba") {
+        let sha1sum = Sha1::digest(&content);
+        let sha1sum = hex::encode(&sha1sum);
+
+        if sha1sum != gba.sha1 {
+            eprintln!("baserom.gba doesn't match the sha1 checksum.");
+            eprintln!("Expected: {sha1sum}");
+            eprintln!("Got:      {}", gba.sha1);
+        }
+    }
+
     let mut file = File::create("checksum.sha1")?;
     writeln!(file, "{}  {}.gba", gba.sha1, gba.name)?;
 
