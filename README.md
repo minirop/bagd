@@ -17,16 +17,13 @@ $ bagd <command>
 The command to use to initialise a project.
 
 Creates `src/` and `asm/` folders (if they don't exist). \
-Creates the file `checksum.sha1`. \
-Calls some of the commands below.
+Creates `checksum.sha1`. \
+Calls `linker`. \
+Calls `split`.
 
 ### linker
 
 Generate the linker script.
-
-### makefile
-
-Generate the Makefile.
 
 ### split
 
@@ -34,16 +31,12 @@ Extract the untouched parts of the ROM.
 
 ### update
 
-The command to use to regenerate the files when `project.yml` changes, instead of calling `clean`, `linker` and `split` manually.
+The command to use to regenerate the files when `project.yml` changes, instead of calling `clean`, and `split` manually.
 
 ### build
 
-Calls `make`.
+Build the project based on the commands in the `build` object.
 
 ### clean
 
 Removes build artifacts (e.g. `.o` files).
-
-## Notes
-
-For now, it generates a `Makefile` and calls `make`, this might change in the future.

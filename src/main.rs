@@ -1,12 +1,15 @@
 use clap::Parser;
 use clap::Subcommand;
+use glob::glob;
+use regex::Captures;
+use regex::Regex;
 use serde::Deserialize;
 use sha1::Digest;
 use sha1::Sha1;
 use std::fs;
 use std::io::Write;
-use std::os::unix::process::CommandExt;
 use std::process;
+use std::sync::LazyLock;
 use std::{collections::HashMap, fmt::Display, fs::File};
 
 #[derive(Debug, Parser)]
@@ -23,8 +26,6 @@ enum Commands {
     Update,
     /// Generate the linker script
     Linker,
-    /// Generate the makefile
-    Makefile,
     /// Export the missing parts of the rom
     Split,
     /// Build the rom
@@ -65,6 +66,24 @@ struct Segment {
     section: Section,
     address: u32,
     size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Build {
+    constants: HashMap<String, String>,
+    commands: Vec<Command>,
+    files: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum Command {
+    String(String),
+    Folder {
+        folder: String,
+        extension: String,
+        exec: Vec<String>,
+    },
 }
 
 #[derive(Debug)]
@@ -111,25 +130,25 @@ struct Gba {
     rom: Rom,
     iwram: Option<WRam>,
     ewram: Option<WRam>,
+    build: Build,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let yaml = std::fs::read_to_string("project.yml").unwrap();
     let gba: Gba = yaml_serde::from_str(&yaml)?;
 
     match args.command {
-        Commands::Build => build_project(),
+        Commands::Build => build_project(&gba),
         Commands::Clean => clean_project(&gba),
         Commands::Init => init_project(&gba),
         Commands::Linker => ldscript_write(&gba),
-        Commands::Makefile => makefile_write(&gba),
         Commands::Split => missing_asm_write(&gba),
         Commands::Update => update_project(&gba),
     }
 }
 
-fn ldscript_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+fn ldscript_write(gba: &Gba) -> anyhow::Result<()> {
     let mut file = File::create("ldscript.txt")?;
 
     writeln!(
@@ -257,7 +276,7 @@ fn wram_write(
     wram: &WRam,
     name: &str,
     segments: &HashMap<&str, Format>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let name_uppercase = name.to_ascii_uppercase();
     writeln!(
         file,
@@ -287,76 +306,19 @@ fn wram_write(
     Ok(())
 }
 
-fn makefile_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
-    let mut file = File::create("Makefile")?;
-    let name = &gba.name;
+fn init_project(gba: &Gba) -> anyhow::Result<()> {
+    if let Ok(content) = std::fs::read("baserom.gba") {
+        let sha1sum = Sha1::digest(&content);
+        let sha1sum = hex::encode(&sha1sum);
 
-    writeln!(
-        file,
-        "#### Tools ####
+        if sha1sum != gba.sha1 {
+            eprintln!("baserom.gba doesn't match the sha1 checksum.");
+            eprintln!("Expected: {sha1sum}");
+            eprintln!("Got:      {}", gba.sha1);
+        }
+    }
 
-AGBCC    := /home/minirop/git/fireemblem8u/tools/agbcc
-CC1      := $(AGBCC)/bin/old_agbcc
-CC1_OLD  := $(AGBCC)/bin/old_agbcc
-CPP      := $(DEVKITARM)/bin/arm-none-eabi-cpp
-AS       := $(DEVKITARM)/bin/arm-none-eabi-as
-LD       := $(DEVKITARM)/bin/arm-none-eabi-ld
-OBJCOPY  := $(DEVKITARM)/bin/arm-none-eabi-objcopy
-
-CC1FLAGS := -mthumb-interwork -Wimplicit -Wparentheses -O2 -fhex-asm
-CPPFLAGS := -I $(AGBCC)/include -iquote include -nostdinc -undef
-ASFLAGS  := -mcpu=arm7tdmi -mthumb-interwork -I asminclude
-
-#### Files ####
-
-ROM      := {name}.gba
-ELF      := $(ROM:.gba=.elf)
-MAP      := $(ROM:.gba=.map)
-LDSCRIPT := ldscript.txt
-SYMBOLS  := symbols.txt
-CFILES   := $(wildcard src/*.c)
-SFILES   := $(wildcard asm/*.s) $(wildcard data/*.s)
-OFILES   := $(SFILES:.s=.o) $(CFILES:.c=.o)
-
-src/agb_flash.o: CC1FLAGS := -O1 -mthumb-interwork
-src/agb_flash_1m.o: CC1FLAGS := -O1 -mthumb-interwork
-src/agb_flash_mx.o: CC1FLAGS := -O1 -mthumb-interwork
-
-src/libc.o: CC1 := $(CC1_OLD)
-src/libc.o: CC1FLAGS := -O2
-
-#### Main Targets ####
-
-compare: $(ROM)
-\tsha1sum -c checksum.sha1
-
-clean:
-\t$(RM) $(ROM) $(ELF) $(MAP) $(OFILES) src/*.s
-
-#### Recipes ####
-
-$(ELF): $(OFILES) $(LDSCRIPT) $(SYMBOLS)
-\t$(LD) -T $(SYMBOLS) -T $(LDSCRIPT) -Map $(MAP) $(OFILES) $(AGBCC)/lib/libgcc.a -o $@
-
-%.gba: %.elf
-\t$(OBJCOPY) -O binary --pad-to 0x8000000 $< $@
-
-%.o: %.c
-\t$(CPP) $(CPPFLAGS) $< | $(CC1) $(CC1FLAGS) -o $*.s
-\t$(AS) $(ASFLAGS) $*.s -o $*.o
-
-%.o: %.s
-\t$(AS) $(ASFLAGS) $< -o $@
-"
-    )?;
-
-    Ok(())
-}
-
-fn init_project(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
     ldscript_write(gba)?;
-    makefile_write(gba)?;
-    sha1sum_write(gba)?;
     missing_asm_write(gba)?;
 
     std::fs::create_dir_all("asm")?;
@@ -365,7 +327,7 @@ fn init_project(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn missing_asm_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+fn missing_asm_write(gba: &Gba) -> anyhow::Result<()> {
     std::fs::create_dir_all("asm")?;
 
     let segments = &gba.rom.segments;
@@ -406,31 +368,123 @@ fn missing_asm_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sha1sum_write(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
-    if let Ok(content) = std::fs::read("baserom.gba") {
+fn sha1sum_check(gba: &Gba) -> anyhow::Result<()> {
+    if let Ok(content) = std::fs::read(format!("{}.gba", gba.name)) {
         let sha1sum = Sha1::digest(&content);
         let sha1sum = hex::encode(&sha1sum);
 
         if sha1sum != gba.sha1 {
-            eprintln!("baserom.gba doesn't match the sha1 checksum.");
-            eprintln!("Expected: {sha1sum}");
-            eprintln!("Got:      {}", gba.sha1);
+            eprintln!("{}.gba doesn't match the sha1 checksum.", gba.name);
+            eprintln!("Expected: {}", gba.sha1);
+            eprintln!("Got:      {sha1sum}");
+        }
+    } else {
+        eprintln!("{}.gba is missing or can't be read.", gba.name);
+    }
+
+    Ok(())
+}
+
+fn build_project(gba: &Gba) -> anyhow::Result<()> {
+    for command in &gba.build.commands {
+        match command {
+            Command::String(cmd) => {
+                let cmd = replace_variables(cmd, &gba);
+                execute_command(cmd)?;
+            }
+            Command::Folder {
+                folder,
+                extension,
+                exec,
+            } => {
+                let files = retrieve_extension_less_files(folder, extension)?;
+                for e in exec {
+                    let cmd = replace_variables(e, &gba);
+
+                    for file in &files {
+                        let command = cmd.replace("$(NAME)", file);
+                        execute_command(command)?;
+                    }
+                }
+            }
         }
     }
 
-    let mut file = File::create("checksum.sha1")?;
-    writeln!(file, "{}  {}.gba", gba.sha1, gba.name)?;
+    sha1sum_check(gba)?;
 
     Ok(())
 }
 
-fn build_project() -> Result<(), Box<dyn std::error::Error>> {
-    let mut script_command = process::Command::new("make");
-    let _ = script_command.exec();
+fn execute_command(cmd: String) -> anyhow::Result<()> {
+    if let Some(args) = shlex::split(&cmd) {
+        println!("{cmd}");
+        let mut script_command = process::Command::new(&args[0]);
+        script_command.args(&args[1..]);
+        let output = script_command
+            .output()
+            .expect(&format!("Can't execute '{cmd}'."));
+
+        if !output.status.success() {
+            eprintln!("{}", str::from_utf8(&output.stderr)?);
+        }
+    } else {
+        eprintln!("Error with command: {cmd}");
+    }
+
     Ok(())
 }
 
-fn update_project(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\$\([a-zA-Z][a-zA-Z0-9]*\))").unwrap());
+
+fn replace_variables(cmd: &String, gba: &Gba) -> String {
+    let constants = &gba.build.constants;
+
+    let cmd = RE.replace_all(cmd, |caps: &Captures| {
+        assert_eq!(caps.len(), 2);
+
+        if let Some(cap) = caps.get(1) {
+            let string = cap.as_str();
+            let string = &string[2..string.len() - 1];
+            let key = string.to_lowercase();
+
+            if let Some(constant) = constants.get(&key) {
+                let constant = replace_variables(constant, gba);
+                format!("{constant}")
+            } else if let Some(patterns) = gba.build.files.get(&key) {
+                let mut found_files = vec![];
+                for pattern in patterns {
+                    for entry in glob(pattern).expect("Can't get files") {
+                        match entry {
+                            Ok(path) => {
+                                found_files.push(path.to_str().unwrap().to_string());
+                            }
+                            Err(e) => println!("{:?}", e),
+                        }
+                    }
+                }
+
+                found_files.join(" ")
+            } else {
+                match key.as_str() {
+                    "rom" => format!("{}", gba.name),
+                    _ => {
+                        if let Ok(value) = std::env::var(string) {
+                            format!("{value}")
+                        } else {
+                            format!("$({string})")
+                        }
+                    }
+                }
+            }
+        } else {
+            format!("%ERROR%")
+        }
+    });
+
+    cmd.to_string()
+}
+
+fn update_project(gba: &Gba) -> anyhow::Result<()> {
     clean_project(gba)?;
     ldscript_write(gba)?;
     missing_asm_write(gba)?;
@@ -438,11 +492,47 @@ fn update_project(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn remove_split_files(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+fn retrieve_extension_less_files(folder: &str, extension: &str) -> anyhow::Result<Vec<String>> {
+    let files = fs::read_dir(folder)?;
+    let mut ret = vec![];
+
+    for entry in files {
+        let _ = (|| -> anyhow::Result<()> {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if !file_type.is_file() {
+                return Ok(());
+            }
+
+            let mut path = entry.path();
+            let Some(ext) = path.extension() else {
+                return Ok(());
+            };
+
+            if ext != extension {
+                return Ok(());
+            }
+
+            path.set_extension("");
+
+            let Some(full_path) = path.to_str() else {
+                return Ok(());
+            };
+
+            ret.push(full_path.to_string());
+
+            Ok(())
+        })();
+    }
+
+    Ok(ret)
+}
+
+fn remove_split_files(gba: &Gba) -> anyhow::Result<()> {
     let asm_files = fs::read_dir("asm")?;
 
     for entry in asm_files {
-        let _ = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let _ = (|| -> anyhow::Result<()> {
             let entry = entry?;
             let file_type = entry.file_type()?;
             if !file_type.is_file() {
@@ -482,7 +572,7 @@ fn remove_split_files(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn clean_project(gba: &Gba) -> Result<(), Box<dyn std::error::Error>> {
+fn clean_project(gba: &Gba) -> anyhow::Result<()> {
     clean_folder("asm", "o");
     clean_folder("src", "o");
     clean_folder("src", "s");
@@ -495,7 +585,7 @@ fn clean_folder(name: &str, ext: &str) {
     let asm_files = fs::read_dir(name).unwrap();
 
     for entry in asm_files {
-        let _ = (|| -> Result<(), Box<dyn std::error::Error>> {
+        let _ = (|| -> anyhow::Result<()> {
             let entry = entry?;
             let file_type = entry.file_type()?;
             if !file_type.is_file() {
