@@ -16,8 +16,8 @@ $ bagd <command>
 
 The command to use to initialise a project.
 
-Creates `src/` and `asm/` folders (if they don't exist). \
-Creates `checksum.sha1`. \
+Checks `baserom.gba` has the correct checksum. \
+Creates the `src/` folder (if it doesn't exist). \
 Calls `linker`. \
 Calls `split`.
 
@@ -31,7 +31,7 @@ Extract the untouched parts of the ROM.
 
 ### update
 
-The command to use to regenerate the files when `project.yml` changes, instead of calling `clean`, and `split` manually.
+The command to use to regenerate the files when `project.yml` changes, instead of calling `clean`, `linker`, and `split` manually.
 
 ### build
 

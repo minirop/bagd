@@ -307,22 +307,12 @@ fn wram_write(
 }
 
 fn init_project(gba: &Gba) -> anyhow::Result<()> {
-    if let Ok(content) = std::fs::read("baserom.gba") {
-        let sha1sum = Sha1::digest(&content);
-        let sha1sum = hex::encode(&sha1sum);
+    sha1sum_check("baserom.gba", &gba.sha1)?;
 
-        if sha1sum != gba.sha1 {
-            eprintln!("baserom.gba doesn't match the sha1 checksum.");
-            eprintln!("Expected: {sha1sum}");
-            eprintln!("Got:      {}", gba.sha1);
-        }
-    }
+    std::fs::create_dir_all("src")?;
 
     ldscript_write(gba)?;
     missing_asm_write(gba)?;
-
-    std::fs::create_dir_all("asm")?;
-    std::fs::create_dir_all("src")?;
 
     Ok(())
 }
@@ -368,18 +358,18 @@ fn missing_asm_write(gba: &Gba) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn sha1sum_check(gba: &Gba) -> anyhow::Result<()> {
-    if let Ok(content) = std::fs::read(format!("{}.gba", gba.name)) {
+fn sha1sum_check(filename: &str, sha1: &str) -> anyhow::Result<()> {
+    if let Ok(content) = std::fs::read(format!("{filename}.gba")) {
         let sha1sum = Sha1::digest(&content);
         let sha1sum = hex::encode(&sha1sum);
 
-        if sha1sum != gba.sha1 {
-            eprintln!("{}.gba doesn't match the sha1 checksum.", gba.name);
-            eprintln!("Expected: {}", gba.sha1);
+        if sha1sum != sha1 {
+            eprintln!("{filename}.gba doesn't match the sha1 checksum.");
+            eprintln!("Expected: {sha1}");
             eprintln!("Got:      {sha1sum}");
         }
     } else {
-        eprintln!("{}.gba is missing or can't be read.", gba.name);
+        eprintln!("{filename}.gba is missing or can't be read.");
     }
 
     Ok(())
@@ -410,7 +400,7 @@ fn build_project(gba: &Gba) -> anyhow::Result<()> {
         }
     }
 
-    sha1sum_check(gba)?;
+    sha1sum_check(&gba.name, &gba.sha1)?;
 
     Ok(())
 }
@@ -572,6 +562,7 @@ fn remove_split_files(gba: &Gba) -> anyhow::Result<()> {
     Ok(())
 }
 
+// add configuration in project.yml?
 fn clean_project(gba: &Gba) -> anyhow::Result<()> {
     clean_folder("asm", "o");
     clean_folder("src", "o");
