@@ -34,26 +34,28 @@ enum Commands {
     Clean,
 }
 
-#[derive(Debug, Copy, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 enum Format {
     Asm,
     C,
+    #[default]
+    Library,
 }
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 enum Section {
+    Rodata,
     #[default]
     Text,
-    Rodata,
 }
 
 impl Display for Section {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Section::Text => write!(f, ".text"),
             Section::Rodata => write!(f, ".rodata"),
+            Section::Text => write!(f, ".text"),
         }
     }
 }
@@ -61,9 +63,11 @@ impl Display for Section {
 #[derive(Debug, Deserialize)]
 struct Segment {
     name: String,
+    #[serde(default)]
     format: Format,
     #[serde(default)]
     section: Section,
+    library: Option<String>,
     address: u32,
     size: Option<u32>,
 }
@@ -227,6 +231,13 @@ SECTIONS
         match segment.format {
             Format::Asm => writeln!(file, "asm/{name}.o({section});"),
             Format::C => writeln!(file, "src/{name}.o({section});"),
+            Format::Library => {
+                let Some(library) = &segment.library else {
+                    panic!("Library segment needs a library name");
+                };
+
+                writeln!(file, "*{library}:{name}.o({section});")
+            }
         }?;
 
         last_size = segment.size;
@@ -295,6 +306,7 @@ fn wram_write(
             match format {
                 Format::Asm => writeln!(file, "asm/{name}.o(.bss);"),
                 Format::C => writeln!(file, "src/{name}.o(.bss);"),
+                Format::Library => unreachable!(), // todo?
             }?;
         } else {
             writeln!(file, "{name} = .;")?;
