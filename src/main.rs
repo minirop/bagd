@@ -427,10 +427,11 @@ fn execute_command(cmd: String) -> anyhow::Result<()> {
             .expect(&format!("Can't execute '{cmd}'."));
 
         if !output.status.success() {
-            eprintln!("{}", str::from_utf8(&output.stderr)?);
+            let message = str::from_utf8(&output.stderr)?.to_string();
+            return Err(anyhow::Error::msg(message));
         }
     } else {
-        eprintln!("Error with command: {cmd}");
+        return Err(anyhow::Error::msg(format!("Error with command: {cmd}")));
     }
 
     Ok(())
