@@ -242,7 +242,7 @@ SECTIONS
 
         last_size = segment.size;
 
-        segments.insert(name, segment.format);
+        segments.insert(name, segment);
     }
 
     let rom_size = 0x800000;
@@ -286,7 +286,7 @@ fn wram_write(
     file: &mut File,
     wram: &WRam,
     name: &str,
-    segments: &HashMap<&str, Format>,
+    segments: &HashMap<&str, &Segment>,
 ) -> anyhow::Result<()> {
     let name_uppercase = name.to_ascii_uppercase();
     writeln!(
@@ -302,11 +302,17 @@ fn wram_write(
         let address = symbol.address;
 
         write!(file, "        . = 0x{:06X}; ", address)?;
-        if let Some(format) = segments.get(name) {
-            match format {
+        if let Some(segment) = segments.get(name) {
+            match segment.format {
                 Format::Asm => writeln!(file, "asm/{name}.o(.bss);"),
                 Format::C => writeln!(file, "src/{name}.o(.bss);"),
-                Format::Library => unreachable!(), // todo?
+                Format::Library => {
+                    let Some(library) = &segment.library else {
+                        panic!("Library segment needs a library name");
+                    };
+
+                    writeln!(file, "*{library}:{name}.o(.bss);")
+                }
             }?;
         } else {
             writeln!(file, "{name} = .;")?;
