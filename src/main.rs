@@ -46,6 +46,7 @@ enum Format {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 enum Section {
+    Data,
     Rodata,
     #[default]
     Text,
@@ -54,6 +55,7 @@ enum Section {
 impl Display for Section {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Section::Data => write!(f, ".data"),
             Section::Rodata => write!(f, ".rodata"),
             Section::Text => write!(f, ".text"),
         }
@@ -139,7 +141,7 @@ struct Gba {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let yaml = std::fs::read_to_string("project.yml").unwrap();
+    let yaml = std::fs::read_to_string("project.yml")?;
     let gba: Gba = yaml_serde::from_str(&yaml)?;
 
     match args.command {
@@ -627,8 +629,8 @@ mod unit_parser {
         let val = if let Some(unit) = s.pop() {
             if let Ok(value) = s.parse::<u32>() {
                 match unit {
-                    'M' => value * 1_000_000,
-                    'K' => value * 1_000,
+                    'M' => value * 1_024 * 1_024,
+                    'K' => value * 1_024,
                     _ => todo!(),
                 }
             } else {
