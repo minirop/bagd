@@ -23,11 +23,11 @@ Calls `split`.
 
 ### linker
 
-Generate the linker script.
+Generates the linker script.
 
 ### split
 
-Extract the untouched parts of the ROM.
+Extracts the untouched parts of the ROM.
 
 ### update
 
@@ -35,7 +35,11 @@ The command to use to regenerate the files when `project.yml` changes, instead o
 
 ### build
 
-Build the project based on the commands in the `build` object.
+Builds the project based on the commands in the `build` object.
+
+### check
+
+Compares the sections sizes in `.o` files to the sizes defined in `project.yml`. (skips libraries)
 
 ### clean
 

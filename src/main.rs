@@ -1,5 +1,8 @@
 use clap::Parser;
 use clap::Subcommand;
+use elf::ElfBytes;
+use elf::endian::LittleEndian;
+use elf::section::SectionHeader;
 use glob::glob;
 use regex::Captures;
 use regex::Regex;
@@ -32,6 +35,8 @@ enum Commands {
     Build,
     /// Clean build artifacts
     Clean,
+    /// Check's the size of sections for inconsistency
+    Check,
 }
 
 #[derive(Debug, Copy, Clone, Deserialize, PartialEq, Default)]
@@ -151,6 +156,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Linker => ldscript_write(&gba),
         Commands::Split => missing_asm_write(&gba),
         Commands::Update => update_project(&gba),
+        Commands::Check => check_sections(&gba),
     }
 }
 
@@ -578,6 +584,38 @@ fn remove_split_files(gba: &Gba) -> anyhow::Result<()> {
 
             Ok(())
         })();
+    }
+
+    Ok(())
+}
+
+fn check_sections(gba: &Gba) -> anyhow::Result<()> {
+    for segments in gba.rom.segments.windows(2) {
+        let segment = &segments[0];
+        let next_seg = &segments[1];
+        let section_id = match segment.format {
+            Format::Asm => continue,
+            Format::C => match segment.section {
+                Section::Data => ".data",
+                Section::Rodata => ".rodata",
+                Section::Text => ".text",
+            },
+            Format::Library => continue,
+        };
+        let size = segment.size.unwrap_or(next_seg.address - segment.address);
+        let path = std::path::PathBuf::from(format!("src/{}.o", segment.name));
+        let file_data = std::fs::read(path)?;
+        let slice = file_data.as_slice();
+        let file = ElfBytes::<LittleEndian>::minimal_parse(slice)?;
+        let abi_shdr: SectionHeader = file
+            .section_header_by_name(section_id)?
+            .expect(&format!("file should have a {section_id} section"));
+        if abi_shdr.sh_size != size as u64 {
+            println!(
+                "section {section_id} of {} has size {}, but defined size is {}.",
+                segment.name, abi_shdr.sh_size, size
+            );
+        }
     }
 
     Ok(())
