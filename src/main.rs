@@ -389,7 +389,9 @@ fn sha1sum_check(filename: &str, sha1: &str) -> anyhow::Result<()> {
         let sha1sum = Sha1::digest(&content);
         let sha1sum = hex::encode(&sha1sum);
 
-        if sha1sum != sha1 {
+        if sha1sum == sha1 {
+            println!("{filename}.gba is matching.");
+        } else {
             eprintln!("{filename}.gba doesn't match the sha1 checksum.");
             eprintln!("Expected: {sha1}");
             eprintln!("Got:      {sha1sum}");
@@ -426,6 +428,7 @@ fn build_project(gba: &Gba) -> anyhow::Result<()> {
         }
     }
 
+    // move into its own "checksum" command?
     sha1sum_check(&gba.name, &gba.sha1)?;
 
     Ok(())

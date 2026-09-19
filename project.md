@@ -6,9 +6,9 @@
 - sha1: Checksum of baserom.gba.
 - entry: Symbol at address 0x08000000.
 - rom: Definition of the ROM.
-- ewram (optional and probably useless)
-- iwram (optional and probably useless)
-- build
+- ewram: Contains .bss and maybe COMMON sections.
+- iwram: Same as ewram.
+- build: How to build the ROM.
 
 ## Rom
 
@@ -22,14 +22,14 @@
 - format: Can be `c` for `src/$name.c` or `asm` for `asm/$name.s`.
 - address: Starting address of this file, relative to the ROM's address.
 - size: Size of the compiled/assembled, optional if there are no gaps between this segment and the next.
-- section: Section to use (can be `text` or `rodata`), if omitted will be `text`.
+- section: Section to use (can be `text`, `data`, or `rodata`), if omitted will be `text`.
 
 ## ewram
 
 Fields:
 - address: Address of this memory type.
 - size: Size with unit (e.g. `32K` for `32KB`)
-- symbols: No need for it really, just use `-T symbols.txt` at compile time.
+- symbols: List of symbols having a name and an address. If `name` references a file, it will be its `.bss` section.
 
 ## iwram
 
@@ -61,6 +61,7 @@ Inside the content of a constant or in a command, you can use the syntax `$(XXX)
 
 - `$(ROM)` will contain the field `name` of the project.
 - `$(NAME)`, inside an "exec" command, will contain the file path and name without the extension.
+- You can also use environment variables, i.e. `$(PATH)`.
 
 ## Exemple
 
@@ -84,7 +85,7 @@ build:
             - asm/*.o
     constants:
         as: $(DEVKITARM)/bin/arm-none-eabi-as
-        asflags: -mcpu=arm7tdmi -mthumb-interwork -I asminclude
+        asflags: -mcpu=arm7tdmi -mthumb-interwork
     commands:
         # this assembles all ".s" files in "asm/"
         - folder: asm

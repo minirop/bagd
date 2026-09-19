@@ -4,7 +4,7 @@ A tool to handle decompilation projects for the GBA.
 
 ## Project structure
 
-You just need a project file named `project.yml` and the ROM named `baserom.gba`.
+You just need a project file named [project.yml](project.yml) and the ROM named `baserom.gba`.
 
 ## Commands
 
