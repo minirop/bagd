@@ -253,7 +253,7 @@ SECTIONS
         segments.insert(name, segment);
     }
 
-    let rom_size = 0x800000;
+    let rom_size = gba.rom.size;
     if let Some(size) = last_size {
         if current_address + size < rom_size {
             writeln!(
@@ -264,10 +264,10 @@ SECTIONS
         }
     }
 
-    let segments = segments;
-
+    writeln!(file, "        . = {rom_size:#X};")?;
     writeln!(file, "    }} = 0")?;
 
+    let segments = segments;
     if let Some(iwram) = &gba.iwram {
         wram_write(&mut file, iwram, "iwram", &segments)?;
     }
