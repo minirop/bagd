@@ -12,6 +12,7 @@ use sha1::Sha1;
 use std::fs;
 use std::io::Write;
 use std::process;
+use std::process::Stdio;
 use std::sync::LazyLock;
 use std::{collections::HashMap, fmt::Display, fs::File};
 
@@ -437,18 +438,56 @@ fn build_project(gba: &Gba) -> anyhow::Result<()> {
 fn execute_command(cmd: String) -> anyhow::Result<()> {
     if let Some(args) = shlex::split(&cmd) {
         println!("{cmd}");
-        let mut script_command = process::Command::new(&args[0]);
-        script_command.args(&args[1..]);
-        let output = script_command
-            .output()
-            .expect(&format!("Can't execute '{cmd}'."));
+
+        if args.contains(&String::from("|")) {
+            return execute_piped_commands(&args);
+        } else {
+            let mut script_command = process::Command::new(&args[0]);
+            script_command.args(&args[1..]);
+            let output = script_command
+                .output()
+                .expect(&format!("Can't execute '{cmd}'."));
+
+            if !output.status.success() {
+                let message = str::from_utf8(&output.stderr)?.to_string();
+                return Err(anyhow::Error::msg(message));
+            }
+        }
+    } else {
+        return Err(anyhow::Error::msg(format!("Error with command: {cmd}")));
+    }
+
+    Ok(())
+}
+
+fn execute_piped_commands(args: &[String]) -> anyhow::Result<()> {
+    let mut prev_cmd: std::option::Option<process::Child> = None;
+
+    let last_id = args.split(|s| s == "|").count();
+
+    for (id, cmd) in args.split(|s| s == "|").enumerate() {
+        let mut command = process::Command::new(&cmd[0]);
+        if cmd.len() > 1 {
+            command.args(&cmd[1..]);
+        }
+        if id < last_id {
+            command.stdout(Stdio::piped());
+        }
+        if let Some(p_cmd) = prev_cmd {
+            command.stdin(Stdio::from(p_cmd.stdout.unwrap()));
+        }
+
+        let child = command.spawn()?;
+        prev_cmd = Some(child);
+    }
+
+    if let Some(p_cmd) = prev_cmd {
+        let output = p_cmd.wait_with_output()?;
 
         if !output.status.success() {
             let message = str::from_utf8(&output.stderr)?.to_string();
             return Err(anyhow::Error::msg(message));
         }
-    } else {
-        return Err(anyhow::Error::msg(format!("Error with command: {cmd}")));
     }
 
     Ok(())

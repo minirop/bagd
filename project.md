@@ -51,7 +51,8 @@ Name is the variable name, value is a string.
 
 ### commands
 
-Can either be a string containing the command to execute or an object containing the folder to look into, the file extension to grab, and a list of commands to execute on all the files found.
+Can either be a string containing the command to execute or an object containing the folder to look into, the file extension to grab, and a list of commands to execute on all the files found. \
+*Commands can contain pipes*
 
 ## Variables
 
