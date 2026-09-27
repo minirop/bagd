@@ -644,7 +644,7 @@ fn check_sections(gba: &Gba) -> anyhow::Result<()> {
             },
             Format::Library => continue,
         };
-        let size = segment.size.unwrap_or(next_seg.address - segment.address);
+        let size = segment.size.unwrap_or(next_seg.address - segment.address) as u64;
         let path = std::path::PathBuf::from(format!("src/{}.o", segment.name));
         let file_data = std::fs::read(path)?;
         let slice = file_data.as_slice();
@@ -652,11 +652,14 @@ fn check_sections(gba: &Gba) -> anyhow::Result<()> {
         let abi_shdr: SectionHeader = file
             .section_header_by_name(section_id)?
             .expect(&format!("file should have a {section_id} section"));
-        if abi_shdr.sh_size != size as u64 {
-            println!(
-                "section {section_id} of {} has size {}, but defined size is {}.",
-                segment.name, abi_shdr.sh_size, size
-            );
+        if abi_shdr.sh_size != size {
+            // skip if sh_size < size && diff < 4, because it's padding/alignment
+            if abi_shdr.sh_size > size || size - abi_shdr.sh_size > 3 {
+                println!(
+                    "section {section_id} of {} has size {}, but defined size is {}.",
+                    segment.name, abi_shdr.sh_size, size
+                );
+            }
         }
     }
 
