@@ -45,6 +45,7 @@ enum Commands {
 enum Format {
     Asm,
     C,
+    Custom,
     #[default]
     Library,
 }
@@ -240,6 +241,7 @@ SECTIONS
         match segment.format {
             Format::Asm => writeln!(file, "asm/{name}.o({section});"),
             Format::C => writeln!(file, "src/{name}.o({section});"),
+            Format::Custom => writeln!(file, "{name}.o({section});"),
             Format::Library => {
                 let Some(library) = &segment.library else {
                     panic!("Library segment needs a library name");
@@ -322,6 +324,7 @@ fn wram_write(
 
                     writeln!(file, "*{library}:{name}.o(.bss);")
                 }
+                Format::Custom => todo!(),
             }?;
         } else {
             writeln!(file, "{name} = .;")?;
@@ -650,6 +653,7 @@ fn check_sections(gba: &Gba) -> anyhow::Result<()> {
                 Section::Text => ".text",
             },
             Format::Library => continue,
+            Format::Custom => continue,
         };
         let size = segment.size.unwrap_or(next_seg.address - segment.address) as u64;
         let path = std::path::PathBuf::from(format!("src/{}.o", segment.name));
