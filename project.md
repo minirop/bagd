@@ -19,10 +19,17 @@
 ## Segments
 
 - name: Name of the file containing the code.
-- format: Can be `c` for `src/$name.c` or `asm` for `asm/$name.s`.
+- format: Can be `c`, `asm`, `library`, or `custom`. If omitted, defaults to `library`.
+- library: If `format` is `library`, the name of the library (with its `.a` extension).
 - address: Starting address of this file, relative to the ROM's address.
 - size: Size of the compiled/assembled, optional if there are no gaps between this segment and the next.
-- section: Section to use (can be `text`, `data`, or `rodata`), if omitted will be `text`.
+- section: Section to use (can be `text`, `data`, or `rodata`). If omitted, defaults to `text`.
+
+formats:
+- `c`: Uses `src/$name.o`
+- `asm`: Uses `asm/$name.o`
+- `library`: Uses `$name.o` inside `library`
+- `custom`: Uses `$name.o`
 
 ## ewram
 
@@ -64,7 +71,7 @@ Inside the content of a constant or in a command, you can use the syntax `$(XXX)
 - `$(NAME)`, inside an "exec" command, will contain the file path and name without the extension.
 - You can also use environment variables, i.e. `$(PATH)`.
 
-## Exemple
+## Example
 
 ```yaml
 name: my-rom
