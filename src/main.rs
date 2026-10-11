@@ -559,6 +559,13 @@ fn retrieve_extension_less_files(folder: &str, extension: &str) -> anyhow::Resul
         let _ = (|| -> anyhow::Result<()> {
             let entry = entry?;
             let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                if let Some(path) = entry.path().to_str() {
+                    let mut files = retrieve_extension_less_files(path, extension)?;
+                    ret.append(&mut files);
+                }
+                return Ok(());
+            }
             if !file_type.is_file() {
                 return Ok(());
             }
