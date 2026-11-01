@@ -642,6 +642,7 @@ fn remove_split_files(gba: &Gba) -> anyhow::Result<()> {
 }
 
 fn check_sections(gba: &Gba) -> anyhow::Result<()> {
+    // compare sections with compiled code
     for segments in gba.rom.segments.windows(2) {
         let segment = &segments[0];
         let next_seg = &segments[1];
@@ -670,6 +671,33 @@ fn check_sections(gba: &Gba) -> anyhow::Result<()> {
                     "section {section_id} of {} has size {}, but defined size is {}.",
                     segment.name, abi_shdr.sh_size, size
                 );
+            }
+        }
+    }
+
+    // Check for useless "size" fields
+    for segments in gba.rom.segments.windows(2) {
+        let segment = &segments[0];
+        let next_seg = &segments[1];
+        let section_id = match segment.format {
+            Format::Asm => "",
+            Format::C => match segment.section {
+                Section::Data => ".data",
+                Section::Rodata => ".rodata",
+                Section::Text => ".text",
+            },
+            Format::Library => "",
+            Format::Custom => "",
+        };
+
+        if let Some(size) = segment.size {
+            let expected_size = next_seg.address - segment.address;
+            if expected_size.abs_diff(size) < 4 {
+                print!("field 'size' of segment '{}'", segment.name);
+                if section_id.len() > 0 {
+                    print!(" ({section_id})");
+                }
+                println!(" is not necessary.");
             }
         }
     }
