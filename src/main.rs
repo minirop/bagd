@@ -85,6 +85,8 @@ struct Segment {
 struct Build {
     constants: HashMap<String, String>,
     commands: Vec<Command>,
+    #[serde(default)]
+    overrides: HashMap<String, HashMap<String, String>>,
     files: HashMap<String, Vec<String>>,
 }
 
@@ -424,7 +426,13 @@ fn build_project(gba: &Gba) -> anyhow::Result<()> {
                     let cmd = replace_variables(e, &gba);
 
                     for file in &files {
-                        let command = cmd.replace("$(NAME)", file);
+                        let command = if let Some(constants) = gba.build.overrides.get(file) {
+                            replace_variables_with_overrides(e, &gba, constants)
+                                .replace("$(NAME)", file)
+                        } else {
+                            cmd.replace("$(NAME)", file)
+                        };
+
                         execute_command(command)?;
                     }
                 }
@@ -498,7 +506,11 @@ fn execute_piped_commands(args: &[String]) -> anyhow::Result<()> {
 
 static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\$\([a-zA-Z][a-zA-Z0-9]*\))").unwrap());
 
-fn replace_variables(cmd: &String, gba: &Gba) -> String {
+fn replace_variables_with_overrides(
+    cmd: &String,
+    gba: &Gba,
+    overrides: &HashMap<String, String>,
+) -> String {
     let constants = &gba.build.constants;
 
     let cmd = RE.replace_all(cmd, |caps: &Captures| {
@@ -509,8 +521,11 @@ fn replace_variables(cmd: &String, gba: &Gba) -> String {
             let string = &string[2..string.len() - 1];
             let key = string.to_lowercase();
 
-            if let Some(constant) = constants.get(&key) {
-                let constant = replace_variables(constant, gba);
+            if let Some(constant) = overrides.get(&key) {
+                let constant = replace_variables_with_overrides(constant, gba, overrides);
+                format!("{constant}")
+            } else if let Some(constant) = constants.get(&key) {
+                let constant = replace_variables_with_overrides(constant, gba, overrides);
                 format!("{constant}")
             } else if let Some(patterns) = gba.build.files.get(&key) {
                 let mut found_files = vec![];
@@ -544,6 +559,10 @@ fn replace_variables(cmd: &String, gba: &Gba) -> String {
     });
 
     cmd.to_string()
+}
+
+fn replace_variables(cmd: &String, gba: &Gba) -> String {
+    replace_variables_with_overrides(cmd, gba, &HashMap::new())
 }
 
 fn update_project(gba: &Gba) -> anyhow::Result<()> {
