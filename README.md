@@ -43,4 +43,4 @@ Compares the sections sizes in `.o` files to the sizes defined in `project.yml`.
 
 ### clean
 
-Removes build artifacts (e.g. `.o` files).
+Removes the generated ROM, the linker script and the files you decide.

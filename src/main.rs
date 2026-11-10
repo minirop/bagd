@@ -87,7 +87,10 @@ struct Build {
     commands: Vec<Command>,
     #[serde(default)]
     overrides: HashMap<String, HashMap<String, String>>,
+    #[serde(default)]
     files: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    clean: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -724,38 +727,27 @@ fn check_sections(gba: &Gba) -> anyhow::Result<()> {
     Ok(())
 }
 
-// add configuration in project.yml?
 fn clean_project(gba: &Gba) -> anyhow::Result<()> {
-    clean_folder("asm", "o");
-    clean_folder("src", "o");
-    clean_folder("src", "s");
+    for pattern in &gba.build.clean {
+        let patt = replace_variables(pattern, &gba);
+        for path in glob(&patt).expect("Can't get files") {
+            let _ = (|| -> anyhow::Result<()> {
+                let path = path?;
+                if !path.is_file() {
+                    return Ok(());
+                }
+
+                let _ = fs::remove_file(path);
+
+                Ok(())
+            })();
+        }
+    }
+
+    let _ = fs::remove_file("ldscript.txt");
     remove_split_files(gba)?;
 
     Ok(())
-}
-
-fn clean_folder(name: &str, ext: &str) {
-    let asm_files = fs::read_dir(name).unwrap();
-
-    for entry in asm_files {
-        let _ = (|| -> anyhow::Result<()> {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            if !file_type.is_file() {
-                return Ok(());
-            }
-
-            let path = entry.path();
-            let Some(extension) = path.extension() else {
-                return Ok(());
-            };
-            if extension == ext {
-                let _ = fs::remove_file(path);
-            }
-
-            Ok(())
-        })();
-    }
 }
 
 mod unit_parser {

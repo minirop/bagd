@@ -52,9 +52,17 @@ Same as `ewram`.
 
 Name is the variable name, value is an array of files (glob accepted).
 
+### clean
+
+A list of filepaths or patterns to remove when calling `bagd clean` (glob accepted).
+
 ### constants
 
 Name is the variable name, value is a string.
+
+### overrides
+
+Allows you to replace some constants for a specific file.
 
 ### commands
 
@@ -87,13 +95,19 @@ rom:
       size: 0x134
 build:
     files:
-        # $(ofiles) will contains all ".o" files from folders "src/" and "asm/"
+        # $(OFILES) will contains all ".o" files from folders "src/" and "asm/"
         ofiles:
-            - src/*.o
-            - asm/*.o
+            - src/**/*.o # recursive
+            - asm/*.o # won't check sub-folders
+    clean: # remove all .o files when cleaning
+        - src/**/*.o
     constants:
         as: $(DEVKITARM)/bin/arm-none-eabi-as
-        asflags: -mcpu=arm7tdmi -mthumb-interwork
+        asflags: -mcpu=arm7tdmi -mthumb-interwork $(OPT)
+        opt: -O2
+    overrides:
+        src/main: # compiles src/main.c with -O1, other files will use -O2
+            - opt: -O1
     commands:
         # this assembles all ".s" files in "asm/"
         - folder: asm
